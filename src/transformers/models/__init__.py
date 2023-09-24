@@ -17,6 +17,7 @@ from . import (
     align,
     altclip,
     audio_spectrogram_transformer,
+    ced,
     auto,
     autoformer,
     bark,

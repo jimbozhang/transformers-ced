@@ -147,6 +147,10 @@ _import_structure = {
         "AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "ASTConfig",
     ],
+    "models.ced": [
+        "CED_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "CedConfig",
+    ],
     "models.auto": [
         "ALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "CONFIG_MAPPING",
@@ -1106,6 +1110,14 @@ else:
             "ASTForAudioClassification",
             "ASTModel",
             "ASTPreTrainedModel",
+        ]
+    )
+    _import_structure["models.ced"].extend(
+        [
+            "CED_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "CedForAudioClassification",
+            "CedModel",
+            "CedPreTrainedModel",
         ]
     )
     _import_structure["models.auto"].extend(
@@ -4279,6 +4291,10 @@ if TYPE_CHECKING:
         AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         ASTConfig,
     )
+    from .models.ced import (
+        CED_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        CedConfig,
+    )
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -5148,6 +5164,12 @@ if TYPE_CHECKING:
             ASTForAudioClassification,
             ASTModel,
             ASTPreTrainedModel,
+        )
+        from .models.ced import (
+            CED_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CedForAudioClassification,
+            CedModel,
+            CedPreTrainedModel,
         )
         from .models.auto import (
             MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING,
