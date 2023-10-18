@@ -18,13 +18,14 @@
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
+from typing import Optional
+
 
 logger = logging.get_logger(__name__)
 
 CED_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "xiaomi/ced-tiny": "https://huggingface.co/xiaomi/ced-tiny/resolve/main/config.json",
 }
-
 
 
 class CedConfig(PretrainedConfig):
@@ -89,37 +90,56 @@ class CedConfig(PretrainedConfig):
 
     def __init__(
         self,
-        hidden_size=768,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        intermediate_size=3072,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.0,
-        attention_probs_dropout_prob=0.0,
-        initializer_range=0.02,
-        layer_norm_eps=1e-12,
+        outputdim=527,
         patch_size=16,
+        patch_stride=16,
+        embed_dim=768,
+        depth=12,
+        num_heads=12,
+        mlp_ratio=4.,
         qkv_bias=True,
-        frequency_stride=10,
-        time_stride=10,
-        max_length=1024,
-        num_mel_bins=128,
+        drop_rate=0.,
+        attn_drop_rate=0.,
+        drop_path_rate=0.,
+        init_bn: bool = True,
+        norm_layer=None,
+        act_layer=None,
+        init_values=None,
+        target_length=1012,
+        pooling='mean',
+        wavtransforms=None,
+        spectransforms=None,
+        time_patch_out: Optional[float] = None,
+        freq_patch_out: Optional[float] = None,
+        eval_avg='mean',
         **kwargs,
     ):
         super().__init__(**kwargs)
 
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
+        assert pooling in ('mean', 'token', 'dm', 'logit')
+        self.outputdim = outputdim
+        self.pooling = pooling
+        self.embed_dim = embed_dim
+        self.patch_stride = patch_stride
         self.patch_size = patch_size
+        self.n_mels = kwargs.get('n_mels', 64)
+        self.n_fft = kwargs.get('n_fft', 512)
+        self.hop_size = kwargs.get('hop_size', 160)
+        self.win_size = kwargs.get('win_size', 512)
+        self.f_min = kwargs.get('f_min', 0)
+        self.f_max = kwargs.get('f_max', 8000)
+        self.center = kwargs.get('center', True)
+        self.pad_last = kwargs.get('pad_last', True)
+        self.eval_avg = eval_avg
+        self.time_patch_out = time_patch_out
+        self.freq_patch_out = freq_patch_out
+        self.target_length = target_length
+        self.n_mels = kwargs.get('n_mels', 64)
+        self.drop_rate = drop_rate
+        self.drop_path_rate = drop_path_rate
+        self.depth = depth
+        self.num_heads = num_heads
+        self.mlp_ratio = mlp_ratio
         self.qkv_bias = qkv_bias
-        self.frequency_stride = frequency_stride
-        self.time_stride = time_stride
-        self.max_length = max_length
-        self.num_mel_bins = num_mel_bins
+        self.attn_drop_rate = attn_drop_rate
+        self.init_values = init_values

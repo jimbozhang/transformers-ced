@@ -14,8 +14,10 @@
 # limitations under the License.
 """ PyTorch CED (Ced) model."""
 
+import collections
 import math
-from typing import Dict, List, Optional, Set, Tuple, Union
+from functools import partial
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -51,8 +53,9 @@ CED_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-
-# Copied from transformers.models.audio_spectrogram_transformer.modeling_audio_spectrogram_transformer.ASTEmbeddings with AST->Ced
+# Copied from
+# transformers.models.audio_spectrogram_transformer.modeling_audio_spectrogram_transformer.ASTEmbeddings
+# with AST->Ced
 class CedEmbeddings(nn.Module):
     """
     Construct the CLS token, position and patch embeddings.
@@ -92,7 +95,9 @@ class CedEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.audio_spectrogram_transformer.modeling_audio_spectrogram_transformer.ASTPatchEmbeddings with AST->Ced
+# Copied from
+# transformers.models.audio_spectrogram_transformer.modeling_audio_spectrogram_transformer.ASTPatchEmbeddings
+# with AST->Ced
 class CedPatchEmbeddings(nn.Module):
     """
     This class turns `input_values` into the initial `hidden_states` (patch embeddings) of shape `(batch_size,
@@ -371,7 +376,9 @@ class CedEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.audio_spectrogram_transformer.modeling_audio_spectrogram_transformer.ASTPreTrainedModel with AST->Ced,audio_spectrogram_transformer->ced
+# Copied from
+# transformers.models.audio_spectrogram_transformer.modeling_audio_spectrogram_transformer.ASTPreTrainedModel
+# with AST->Ced,audio_spectrogram_transformer->ced
 class CedPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -439,24 +446,294 @@ CED_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
+Conv_Kernel = Union[int, Tuple[int, int]]
+
+
+def to_2tuple(x: Any) -> Tuple[Any, Any]:
+    if isinstance(x, collections.abc.Iterable):
+        return x
+    return (x, x)
+
+
+class AudioPatchEmbed(nn.Module):
+    def __init__(self,
+                 input_size: Conv_Kernel = 224,
+                 patch_size: Conv_Kernel = 16,
+                 patch_stride: Conv_Kernel = 16,
+                 in_chans: int = 1,
+                 embed_dim: int = 768,
+                 norm_layer: Optional[Callable] = None,
+                 flatten: bool = False):
+        super().__init__()
+        self.input_size = to_2tuple(input_size)
+        self.patch_size = to_2tuple(patch_size)
+        self.patch_stride = to_2tuple(patch_stride)
+        self.grid_size = (self.input_size[0] // self.patch_stride[0],
+                          self.input_size[1] // self.patch_stride[1])
+        self.num_patches = self.grid_size[0] * self.grid_size[1]
+        self.flatten = flatten
+
+        self.proj = nn.Conv2d(in_chans,
+                              embed_dim,
+                              kernel_size=patch_size,
+                              stride=patch_stride)
+        self.norm = norm_layer(embed_dim) if norm_layer else nn.Identity()
+
+    def forward(self, x):
+        x = self.proj(x)
+        if self.flatten:
+            x = rearrange(x, 'b c f t -> b (f t) c')
+        x = self.norm(x)
+        return x
+
+
+class Attention(nn.Module):
+
+    def __init__(
+        self,
+        dim,
+        num_heads=8,
+        qkv_bias=False,
+        attn_drop=0.,
+        proj_drop=0.,
+        causal: bool = False,
+    ):
+        super().__init__()
+        assert dim % num_heads == 0, 'dim should be divisible by num_heads'
+        self.num_heads = num_heads
+        head_dim = dim // num_heads
+        self.scale = head_dim**-0.5
+
+        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
+        self.attn_drop = nn.Dropout(attn_drop)
+        self.proj = nn.Linear(dim, dim)
+        self.proj_drop = nn.Dropout(proj_drop)
+        self.causal = causal
+
+    def forward(self, x):
+        B, N, C = x.shape
+        qkv = self.qkv(x).reshape(B, N, 3, self.num_heads,
+                                  C // self.num_heads).permute(2, 0, 3, 1, 4)
+        q, k, v = qkv.unbind(
+            0)  # make torchscript happy (cannot use tensor as tuple)
+
+        attn = (q @ k.transpose(-2, -1)) * self.scale
+        # if mask is not None:
+        # # Mask is a tensor of shape [B, T, T]
+        # # Different from self.causal == True, the mask might be something like:
+        # # [False, False, True]
+        # # [False, False, True]
+        # # [True, True, True]
+        # # We use -inf to pad here, since if we would pad by any number, the entries at rows only containing
+        # # [True, True, True] would lead to weights such as: [0.33,0.33,0.33], which is not correct
+        # mask_value = torch.as_tensor(-float('inf'))
+        # print(mask.shape, attn.shape)
+        # attn = attn.masked_fill(mask, mask_value)
+        if self.causal:
+            mask_value = -torch.finfo(attn.dtype).max
+            i, j = attn.shape[-2:]
+            mask = torch.ones(i, j, device=q.device,
+                              dtype=torch.bool).triu(j - i + 1)
+            attn = attn.masked_fill(mask, mask_value)
+        attn = attn.softmax(dim=-1)
+        # Only for the case that a mask with all True entries on a row is passed.
+        # attn = torch.nan_to_num(attn)
+        attn = self.attn_drop(attn)
+
+        x = (attn @ v).transpose(1, 2).reshape(B, N, C)
+        x = self.proj(x)
+        x = self.proj_drop(x)
+        return x
+
+
+class Mlp(nn.Module):
+
+    def __init__(self,
+                 in_features: int,
+                 hidden_features: Optional[int] = None,
+                 out_features: Optional[int] = None,
+                 act_layer: Callable = nn.GELU,
+                 drop: float = 0.):
+        super().__init__()
+        out_features = out_features or in_features
+        hidden_features = hidden_features or in_features
+        self.fc1 = nn.Linear(in_features, hidden_features)
+        self.act = act_layer()
+        self.fc2 = nn.Linear(hidden_features, out_features)
+        self.drop = nn.Dropout(drop)
+
+    def forward(self, x):
+        x = self.fc1(x)
+        x = self.act(x)
+        x = self.drop(x)
+        x = self.fc2(x)
+        x = self.drop(x)
+        return x
+
+
+class Block(nn.Module):
+
+    def __init__(
+        self,
+        dim,
+        num_heads,
+        mlp_ratio=4.,
+        qkv_bias=False,
+        drop=0.,
+        attn_drop=0.,
+        drop_path=0.,
+        act_layer: Callable = nn.GELU,
+        norm_layer: Callable = nn.LayerNorm,
+        attention_type: Callable = Attention,
+        attention_kwargs={},
+        **kwargs,
+    ):
+        super().__init__()
+        self.norm1 = norm_layer(dim)
+        self.attn = attention_type(dim,
+                                   num_heads=num_heads,
+                                   qkv_bias=qkv_bias,
+                                   attn_drop=attn_drop,
+                                   proj_drop=drop,
+                                   **attention_kwargs)
+        self.ls1 = nn.Identity()
+        self.drop_path1 = DropPath(
+            drop_path) if drop_path > 0. else nn.Identity()
+
+        self.norm2 = norm_layer(dim)
+        self.mlp = Mlp(in_features=dim,
+                       hidden_features=int(dim * mlp_ratio),
+                       act_layer=act_layer,
+                       drop=drop)
+        self.ls2 = nn.Identity()
+        self.drop_path2 = DropPath(
+            drop_path) if drop_path > 0. else nn.Identity()
+
+    def forward(self, x):
+        x = x + self.drop_path1(self.ls1(self.attn(self.norm1(x))))
+        x = x + self.drop_path2(self.ls2(self.mlp(self.norm2(x))))
+        return x
+
+
+# Taken from timm
+def trunc_normal_(tensor, mean=0., std=1., a=-2., b=2.):
+    # type: (Tensor, float, float, float, float) -> Tensor
+    r"""Fills the input Tensor with values drawn from a truncated
+    normal distribution. The values are effectively drawn from the
+    normal distribution :math:`\mathcal{N}(\text{mean}, \text{std}^2)`
+    with values outside :math:`[a, b]` redrawn until they are within
+    the bounds. The method used for generating the random values works
+    best when :math:`a \leq \text{mean} \leq b`.
+
+    NOTE: this impl is similar to the PyTorch trunc_normal_, the bounds [a, b] are
+    applied while sampling the normal with mean/std applied, therefore a, b args
+    should be adjusted to match the range of mean, std args.
+
+    Args:
+        tensor: an n-dimensional `torch.Tensor`
+        mean: the mean of the normal distribution
+        std: the standard deviation of the normal distribution
+        a: the minimum cutoff value
+        b: the maximum cutoff value
+    Examples:
+        >>> w = torch.empty(3, 5)
+        >>> nn.init.trunc_normal_(w)
+    """
+    return _no_grad_trunc_normal_(tensor, mean, std, a, b)
+
+
+def _no_grad_trunc_normal_(tensor, mean, std, a, b):
+    # Cut & paste from PyTorch official master until it's in a few official releases - RW
+    # Method based on https://people.sc.fsu.edu/~jburkardt/presentations/truncated_normal.pdf
+    def norm_cdf(x):
+        # Computes standard normal cumulative distribution function
+        return (1. + math.erf(x / math.sqrt(2.))) / 2.
+
+    with torch.no_grad():
+        # Values are generated by using a truncated uniform distribution and
+        # then using the inverse CDF for the normal distribution.
+        # Get upper and lower cdf values
+        l = norm_cdf((a - mean) / std)
+        u = norm_cdf((b - mean) / std)
+
+        # Uniformly fill tensor with values from [l, u], then translate to
+        # [2l-1, 2u-1].
+        tensor.uniform_(2 * l - 1, 2 * u - 1)
+
+        # Use inverse cdf transform for normal distribution to get truncated
+        # standard normal
+        tensor.erfinv_()
+
+        # Transform to proper mean, std
+        tensor.mul_(std * math.sqrt(2.))
+        tensor.add_(mean)
+
+        # Clamp to ensure it's in the proper range
+        tensor.clamp_(min=a, max=b)
+        return tensor
+
 
 @add_start_docstrings(
     "The bare Ced Model transformer outputting raw hidden-states without any specific head on top.",
     CED_START_DOCSTRING,
 )
-# Copied from transformers.models.audio_spectrogram_transformer.modeling_audio_spectrogram_transformer.ASTModel with AST->Ced,AUDIO_SPECTROGRAM_TRANSFORMER->CED
+# Copied from
+# transformers.models.audio_spectrogram_transformer.modeling_audio_spectrogram_transformer.ASTModel
+# with AST->Ced,AUDIO_SPECTROGRAM_TRANSFORMER->CED
 class CedModel(CedPreTrainedModel):
     def __init__(self, config: CedConfig) -> None:
         super().__init__(config)
         self.config = config
 
-        self.embeddings = CedEmbeddings(config)
-        self.encoder = CedEncoder(config)
+        # Allowed length in number of frames, otherwise the positional embedding will throw an error
+        self.maximal_allowed_length = self.config.target_length
 
-        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.init_bn = torch.nn.BatchNorm2d(config.n_mels, momentum=0.01)
 
-        # Initialize weights and apply final processing
-        self.post_init()
+        self.patch_embed = AudioPatchEmbed(input_size=(config.n_mels,
+                                                       config.target_length),
+                                           embed_dim=config.embed_dim,
+                                           patch_size=config.patch_size,
+                                           flatten=False,
+                                           patch_stride=config.patch_stride)
+
+        self.time_pos_embed = nn.Parameter(
+            torch.randn(1, config.embed_dim, 1, self.patch_embed.grid_size[1]) * .02)
+        self.freq_pos_embed = nn.Parameter(
+            torch.randn(1, config.embed_dim, self.patch_embed.grid_size[0], 1) * .02)
+        norm_layer = partial(nn.LayerNorm, eps=1e-6)
+        act_layer = nn.GELU
+        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.depth)
+               ]  # stochastic depth decay rule
+        self.pos_drop = nn.Dropout(p=config.drop_rate)
+        self.blocks = nn.Sequential(*[
+            Block(
+                dim=config.embed_dim,
+                num_heads=config.num_heads,
+                mlp_ratio=config.mlp_ratio,
+                qkv_bias=config.qkv_bias,
+                init_values=config.init_values,
+                drop=config.drop_rate,
+                attn_drop=config.attn_drop_rate,
+                drop_path=dpr[i],
+                norm_layer=norm_layer,
+                act_layer=act_layer,
+                attention_type=Attention,
+            ) for i in range(config.depth)
+        ])
+        self.norm = norm_layer(config.embed_dim)
+        self.outputlayer = nn.Sequential(nn.LayerNorm(config.embed_dim),
+                                         nn.Linear(config.embed_dim, config.outputdim))
+        self.apply(self.init_weights)
+
+    def init_weights(self, module):
+        if isinstance(module, nn.Linear):
+            trunc_normal_(module.weight, std=.02)
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.LayerNorm):
+            nn.init.constant_(module.bias, 0)
+            nn.init.constant_(module.weight, 1.0)
 
     def get_input_embeddings(self) -> CedPatchEmbeddings:
         return self.embeddings.patch_embeddings
@@ -469,6 +746,87 @@ class CedModel(CedPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
+    def forward_features(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.patch_embed(x)
+        b, c, f, t = x.shape
+        x = x + self.time_pos_embed[:, :, :, :t]
+        x = x + self.freq_pos_embed[:, :, :, :]  # Just to support __getitem__ in posembed
+
+        # x = rearrange(x, 'b c f t -> b (f t) c')
+        x = torch.permute(torch.flatten(x, 2, 3), (0, 2, 1))
+
+        if self.config.pooling == 'token':
+            cls_token = self.cls_token.expand(x.shape[0], -1, -1)
+            cls_token = cls_token + self.token_pos_embed
+            x = torch.cat((cls_token, x), dim=1)
+        x = self.pos_drop(x)
+        x = self.blocks(x)
+        x = self.norm(x)
+        return x
+
+    def forward_head(self, x: torch.Tensor) -> torch.Tensor:
+        if self.config.pooling == 'token':
+            x = x[:, 0]
+            return self.outputlayer(x).sigmoid()
+        elif self.config.pooling == 'mean':
+            x = x.mean(1)
+            return self.outputlayer(x).sigmoid()
+        elif self.config.pooling == 'logit':
+            x = x.mean(1)
+            return self.outputlayer(x)
+        elif self.config.pooling == 'dm':
+            # Unpack using the frequency dimension, which is constant
+            # 'b (f t) d -> b f t d', f=self.patch_embed.grid_size[0])
+            x = torch.reshape(x, (x.shape[0], self.patch_embed.grid_size[0], -1, x.shape[3]))
+
+            # First poolin frequency, then sigmoid the (B T D) output
+            x = self.outputlayer(x.mean(1)).sigmoid()
+            return x.mean(1)
+        else:
+            return x.mean(1)
+
+    def forward_spectrogram(self, x: torch.Tensor) -> torch.Tensor:
+        x = torch.unsqueeze(x, 1)
+
+        x = torch.permute(x, (0, 2, 1, 3))
+        x = self.init_bn(x)
+        x = torch.permute(x, (0, 2, 1, 3))
+
+        if x.shape[-1] > self.maximal_allowed_length:
+            splits = x.split(self.target_length, -1)
+
+            if splits[-1].shape[-1] < self.target_length:
+                if self.pad_last:
+                    pad = torch.zeros(*x.shape[:-1],
+                                      self.target_length,
+                                      device=x.device)
+                    pad[..., :splits[-1].shape[-1]] = splits[-1]
+                    splits = torch.stack((*splits[:-1], pad), dim=0)
+                else:
+                    splits = torch.stack(splits[:-1], dim=0)
+            else:
+                splits = torch.stack(splits[:-1], dim=0)
+            n_splits = len(splits)
+            x = torch.flatten(splits, 0, 1)  # spl b c f t-> (spl b) c f t
+            x = self.forward_head(self.forward_features(x))
+            x = torch.reshape(x, (n_splits, -1, self.outputdim))  # (spl b) d -> spl b d, spl=n_splits
+
+            if self.eval_avg == 'mean':
+                x = x.mean(0)
+            elif self.eval_avg == 'max':
+                x = x.max(0)[0]
+            else:
+                raise ValueError(
+                    f'Unknown Eval average function ({self.eval_avg})')
+
+        else:
+            x = self.forward_features(x)
+            x = self.forward_head(x)
+        return x
+
+    def forward(self, x: torch.Tensor):
+        return self.forward_spectrogram(x)
+
     @add_start_docstrings_to_model_forward(CED_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -477,7 +835,7 @@ class CedModel(CedPreTrainedModel):
         modality="audio",
         expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
-    def forward(
+    def _forward(
         self,
         input_values: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
@@ -526,7 +884,9 @@ class CedModel(CedPreTrainedModel):
         )
 
 
-# Copied from transformers.models.audio_spectrogram_transformer.modeling_audio_spectrogram_transformer.ASTMLPHead with AST->Ced
+# Copied from
+# transformers.models.audio_spectrogram_transformer.modeling_audio_spectrogram_transformer.ASTMLPHead
+# with AST->Ced
 class CedMLPHead(nn.Module):
     def __init__(self, config: CedConfig):
         super().__init__()
@@ -546,7 +906,10 @@ class CedMLPHead(nn.Module):
     """,
     CED_START_DOCSTRING,
 )
-# Copied from transformers.models.audio_spectrogram_transformer.modeling_audio_spectrogram_transformer.ASTForAudioClassification with AST->Ced,AUDIO_SPECTROGRAM_TRANSFORMER->CED,audio_spectrogram_transformer->ced
+# Copied from
+# transformers.models.audio_spectrogram_transformer.modeling_audio_spectrogram_transformer.ASTForAudioClassification
+# with
+# AST->Ced,AUDIO_SPECTROGRAM_TRANSFORMER->CED,audio_spectrogram_transformer->ced
 class CedForAudioClassification(CedPreTrainedModel):
     def __init__(self, config: CedConfig) -> None:
         super().__init__(config)

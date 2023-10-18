@@ -42,7 +42,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["feature_extraction_ced"] = ["ASTFeatureExtractor"]
+    _import_structure["feature_extraction_ced"] = ["CedFeatureExtractor"]
 
 if TYPE_CHECKING:
     from .configuration_ced import (
