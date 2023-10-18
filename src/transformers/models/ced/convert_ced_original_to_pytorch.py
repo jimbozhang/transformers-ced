@@ -158,29 +158,17 @@ def convert_ced_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     config = get_ced_config(model_name)
 
     model_name_to_url = {
-        "ast-finetuned-audioset-10-10-0.4593": (
-            "https://www.dropbox.com/s/ca0b1v2nlxzyeb4/audioset_10_10_0.4593.pth?dl=1"
+        "ced_tiny": (
+            "https://zenodo.org/record/8275347/files/audiotransformer_tiny_mAP_4814.pt?download=1"
         ),
-        "ast-finetuned-audioset-10-10-0.450": (
-            "https://www.dropbox.com/s/1tv0hovue1bxupk/audioset_10_10_0.4495.pth?dl=1"
+        "ced_mini": (
+            "https://zenodo.org/record/8275347/files/audiotransformer_mini_mAP_4896.pt?download=1"
         ),
-        "ast-finetuned-audioset-10-10-0.448": (
-            "https://www.dropbox.com/s/6u5sikl4b9wo4u5/audioset_10_10_0.4483.pth?dl=1"
+        "ced_small": (
+            "https://zenodo.org/record/8275319/files/audiotransformer_small_mAP_4958.pt?download=1"
         ),
-        "ast-finetuned-audioset-10-10-0.448-v2": (
-            "https://www.dropbox.com/s/kt6i0v9fvfm1mbq/audioset_10_10_0.4475.pth?dl=1"
-        ),
-        "ast-finetuned-audioset-12-12-0.447": (
-            "https://www.dropbox.com/s/snfhx3tizr4nuc8/audioset_12_12_0.4467.pth?dl=1"
-        ),
-        "ast-finetuned-audioset-14-14-0.443": (
-            "https://www.dropbox.com/s/z18s6pemtnxm4k7/audioset_14_14_0.4431.pth?dl=1"
-        ),
-        "ast-finetuned-audioset-16-16-0.442": (
-            "https://www.dropbox.com/s/mdsa4t1xmcimia6/audioset_16_16_0.4422.pth?dl=1"
-        ),
-        "ast-finetuned-speech-commands-v2": (
-            "https://www.dropbox.com/s/q0tbqpwv44pquwy/speechcommands_10_10_0.9812.pth?dl=1"
+        "ced_base": (
+            "https://zenodo.org/record/8275347/files/audiotransformer_base_mAP_4999.pt?download=1"
         ),
     }
 
@@ -264,7 +252,7 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--model_name",
-        default="ast-finetuned-audioset-10-10-0.4593",
+        default="ced_mini",
         type=str,
         help="Name of the CED model you'd like to convert.",
     )

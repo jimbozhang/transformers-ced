@@ -44,6 +44,9 @@ _SEQ_CLASS_EXPECTED_LOSS = 0.17
 
 CED_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "xiaomi/ced-tiny",
+    "xiaomi/ced-mini",
+    "xiaomi/ced-small",
+    "xiaomi/ced-base",
     # See all CED models at https://huggingface.co/models?filter=ced
 ]
 
@@ -83,28 +86,6 @@ CED_START_DOCSTRING = r"""
 """
 
 CED_INPUTS_DOCSTRING = r"""
-    Args:
-        input_values (`torch.FloatTensor` of shape `(batch_size, max_length, num_mel_bins)`):
-            Float values mel features extracted from the raw audio waveform. Raw audio waveform can be obtained by
-            loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via
-            the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
-            [`AutoFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
-            tensor of type `torch.FloatTensor`. See [`~ASTFeatureExtractor.__call__`]
-
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 Conv_Kernel = Union[int, Tuple[int, int]]
@@ -318,7 +299,7 @@ class CedBlock(nn.Module):
 
 # Taken from timm
 def trunc_normal_(tensor, mean=0., std=1., a=-2., b=2.):
-    # type: (Tensor, float, float, float, float) -> Tensor
+    # type: (torch.Tensor, float, float, float, float) -> torch.Tensor
     r"""Fills the input Tensor with values drawn from a truncated
     normal distribution. The values are effectively drawn from the
     normal distribution :math:`\mathcal{N}(\text{mean}, \text{std}^2)`
@@ -420,8 +401,9 @@ class CedModel(CedPreTrainedModel):
             ) for i in range(config.depth)
         ])
         self.norm = norm_layer(config.embed_dim)
-        self.outputlayer = nn.Sequential(nn.LayerNorm(config.embed_dim),
-                                         nn.Linear(config.embed_dim, config.outputdim))
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def forward_features(self, x: torch.Tensor) -> torch.Tensor:
         x = self.patch_embed(x)
@@ -440,6 +422,43 @@ class CedModel(CedPreTrainedModel):
         x = self.blocks(x)
         x = self.norm(x)
         return x
+
+    def forward_spectrogram(self, x: torch.Tensor) -> torch.Tensor:
+        x = torch.unsqueeze(x, 1)
+
+        x = torch.permute(x, (0, 2, 1, 3))
+        x = self.init_bn(x)
+        x = torch.permute(x, (0, 2, 1, 3))
+
+        if x.shape[-1] > self.maximal_allowed_length:
+            raise ValueError(f"Length of input is too long. Maximum allowed length is {self.maximal_allowed_length}")
+
+        return self.forward_features(x)
+
+    def forward(self, x: torch.Tensor):
+        return self.forward_spectrogram(x)
+
+
+@add_start_docstrings(
+    """
+    Ced model with an audio classification head on top (a linear layer on top of the pooled
+    output) e.g. for datasets like AudioSet, Speech Commands v2.
+    """,
+    CED_START_DOCSTRING,
+)
+class CedForAudioClassification(CedPreTrainedModel):
+    def __init__(self, config: CedConfig) -> None:
+        super().__init__(config)
+        self.config = config
+
+        self.ced = CedModel(config)
+
+        # Classifier head
+        self.outputlayer = nn.Sequential(nn.LayerNorm(config.embed_dim),
+                                         nn.Linear(config.embed_dim, config.outputdim))
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def forward_head(self, x: torch.Tensor) -> torch.Tensor:
         if self.config.pooling == 'token':
@@ -462,20 +481,14 @@ class CedModel(CedPreTrainedModel):
         else:
             return x.mean(1)
 
-    def forward_spectrogram(self, x: torch.Tensor) -> torch.Tensor:
-        x = torch.unsqueeze(x, 1)
+    def forward(self, x: torch.Tensor):
+        if x.shape[-1] > self.ced.maximal_allowed_length:
+            splits = x.split(self.ced.target_length, -1)
 
-        x = torch.permute(x, (0, 2, 1, 3))
-        x = self.init_bn(x)
-        x = torch.permute(x, (0, 2, 1, 3))
-
-        if x.shape[-1] > self.maximal_allowed_length:
-            splits = x.split(self.target_length, -1)
-
-            if splits[-1].shape[-1] < self.target_length:
+            if splits[-1].shape[-1] < self.ced.target_length:
                 if self.pad_last:
                     pad = torch.zeros(*x.shape[:-1],
-                                      self.target_length,
+                                      self.ced.target_length,
                                       device=x.device)
                     pad[..., :splits[-1].shape[-1]] = splits[-1]
                     splits = torch.stack((*splits[:-1], pad), dim=0)
@@ -485,7 +498,7 @@ class CedModel(CedPreTrainedModel):
                 splits = torch.stack(splits[:-1], dim=0)
             n_splits = len(splits)
             x = torch.flatten(splits, 0, 1)  # spl b c f t-> (spl b) c f t
-            x = self.forward_head(self.forward_features(x))
+            x = self.forward_head(self.ced(x))
             x = torch.reshape(x, (n_splits, -1, self.outputdim))  # (spl b) d -> spl b d, spl=n_splits
 
             if self.eval_avg == 'mean':
@@ -495,11 +508,7 @@ class CedModel(CedPreTrainedModel):
             else:
                 raise ValueError(
                     f'Unknown Eval average function ({self.eval_avg})')
-
         else:
-            x = self.forward_features(x)
+            x = self.ced(x)
             x = self.forward_head(x)
         return x
-
-    def forward(self, x: torch.Tensor):
-        return self.forward_spectrogram(x)
