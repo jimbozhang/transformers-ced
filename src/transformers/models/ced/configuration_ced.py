@@ -35,7 +35,7 @@ class CedConfig(PretrainedConfig):
 
     def __init__(
         self,
-        name="ced-tiny",
+        name=None,
         outputdim=527,
         patch_size=16,
         patch_stride=16,
@@ -82,7 +82,7 @@ class CedConfig(PretrainedConfig):
             num_heads = 12
             mlp_ratio = 4
         else:
-            logger.warning(f"Unknown model name {name}. Using user custom config.")
+            logger.info("No model name specified for CedConfig, use default settings.")
 
         assert pooling in ("mean", "token", "dm", "logit")
         self.outputdim = outputdim
