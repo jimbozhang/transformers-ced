@@ -74,10 +74,15 @@ def rename_key(name):
     return name
 
 
-def convert_state_dict(orig_state_dict, model_type="ced"):
+def convert_state_dict(orig_state_dict):
     remove_keys(orig_state_dict)
     new_state_dict = {rename_key(key): val for key, val in orig_state_dict.items()}
     return new_state_dict
+
+
+def state_dict_from_original_pt(checkpoint_url):
+    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")
+    return convert_state_dict(state_dict)
 
 
 @torch.no_grad()
@@ -101,15 +106,9 @@ def convert_ced_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
             "https://zenodo.org/record/8275347/files/audiotransformer_base_mAP_4999.pt?download=1"
         ),
     }
-
-    # load original state_dict
-    checkpoint_url = model_name_to_url[model_name]
-    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")
-
     # load 🤗 model
     model = CedForAudioClassification(config)
-    model_state_dict = convert_state_dict(state_dict, model.__class__.__name__)
-    model.load_state_dict(model_state_dict)
+    model.load_state_dict(state_dict_from_original_pt(model_name_to_url[model_name]))
 
     if pytorch_dump_folder_path is not None:
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
