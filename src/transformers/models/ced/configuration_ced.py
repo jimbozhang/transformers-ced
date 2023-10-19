@@ -30,65 +30,12 @@ CED_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class CedConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`CedModel`]. It is used to instantiate an Ced
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the Ced
-    [xiaomi/ced-tiny](https://huggingface.co/xiaomi/ced-tiny) architecture.
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
-            The epsilon used by the layer normalization layers.
-        patch_size (`int`, *optional*, defaults to `16`):
-            The size (resolution) of each patch.
-        qkv_bias (`bool`, *optional*, defaults to `True`):
-            Whether to add a bias to the queries, keys and values.
-        frequency_stride (`int`, *optional*, defaults to 10):
-            Frequency stride to use when patchifying the spectrograms.
-        time_stride (`int`, *optional*, defaults to 10):
-            Temporal stride to use when patchifying the spectrograms.
-        max_length (`int`, *optional*, defaults to 1024):
-            Temporal dimension of the spectrograms.
-        num_mel_bins (`int`, *optional*, defaults to 128):
-            Frequency dimension of the spectrograms (number of Mel-frequency bins).
-
-    Example:
-
-    ```python
-    >>> from transformers import CedConfig, CedModel
-
-    >>> # Initializing a Ced xiaomi/ced-tiny style configuration
-    >>> configuration = CedConfig()
-
-    >>> # Initializing a model (with random weights) from the xiaomi/ced-tiny style configuration
-    >>> model = CedModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
+    TODO: Add docstring
     ```"""
-    model_type = "ced"
 
     def __init__(
         self,
+        name="ced-tiny",
         outputdim=527,
         patch_size=16,
         patch_stride=16,
@@ -100,20 +47,42 @@ class CedConfig(PretrainedConfig):
         drop_rate=0.0,
         attn_drop_rate=0.0,
         drop_path_rate=0.0,
-        init_bn: bool = True,
-        norm_layer=None,
-        act_layer=None,
         init_values=None,
         target_length=1012,
         pooling="mean",
-        wavtransforms=None,
-        spectransforms=None,
         time_patch_out: Optional[float] = None,
         freq_patch_out: Optional[float] = None,
         eval_avg="mean",
         **kwargs,
     ):
         super().__init__(**kwargs)
+
+        if name == "ced-tiny":
+            patch_size = 16
+            embed_dim = 192
+            depth = 12
+            num_heads = 3
+            mlp_ratio = 4
+        elif name == "ced-mini":
+            patch_size = 16
+            embed_dim = 256
+            depth = 12
+            num_heads = 4
+            mlp_ratio = 4
+        elif name == "ced-small":
+            patch_size = 16
+            embed_dim = 384
+            depth = 12
+            num_heads = 6
+            mlp_ratio = 4
+        elif name == "ced-base":
+            patch_size = 16
+            embed_dim = 768
+            depth = 12
+            num_heads = 12
+            mlp_ratio = 4
+        else:
+            logger.warning(f"Unknown model name {name}. Using user custom config.")
 
         assert pooling in ("mean", "token", "dm", "logit")
         self.outputdim = outputdim

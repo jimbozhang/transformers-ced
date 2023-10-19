@@ -495,8 +495,7 @@ class CedModel(CedPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Ced model with an audio classification head on top (a linear layer on top of the pooled output) e.g. for datasets
-    like AudioSet, Speech Commands v2.
+    Ced model with an audio classification head on top (a linear layer on top of the pooled output).
     """,
     CED_START_DOCSTRING,
 )

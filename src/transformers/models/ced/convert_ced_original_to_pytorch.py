@@ -28,39 +28,6 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
-def create_ced_config(model_name):
-    config = CedConfig()
-
-    if model_name == "ced-tiny":
-        config.patch_size = 16
-        config.embed_dim = 192
-        config.depth = 12
-        config.num_heads = 3
-        config.mlp_ratio = 4
-    elif model_name == "ced-mini":
-        config.patch_size = 16
-        config.embed_dim = 256
-        config.depth = 12
-        config.num_heads = 4
-        config.mlp_ratio = 4
-    elif model_name == "ced-small":
-        config.patch_size = 16
-        config.embed_dim = 384
-        config.depth = 12
-        config.num_heads = 6
-        config.mlp_ratio = 4
-    elif model_name == "ced-base":
-        config.patch_size = 16
-        config.embed_dim = 768
-        config.depth = 12
-        config.num_heads = 12
-        config.mlp_ratio = 4
-    else:
-        raise NotImplementedError(f"Model not supported: {model_name}")
-
-    return config
-
-
 def remove_keys(state_dict):
     ignore_keys = []
     for k in ignore_keys:
@@ -79,7 +46,7 @@ def convert_ced_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     """
     Copy/paste/tweak model's weights to our CED structure.
     """
-    config = create_ced_config(model_name)
+    config = CedConfig(model_name)
 
     model_name_to_url = {
         "ced-tiny": ("https://zenodo.org/record/8275347/files/audiotransformer_tiny_mAP_4814.pt?download=1"),
@@ -110,7 +77,7 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--model_name",
-        default="ced_mini",
+        default="ced-mini",
         type=str,
         help="Name of the CED model you'd like to convert.",
     )
