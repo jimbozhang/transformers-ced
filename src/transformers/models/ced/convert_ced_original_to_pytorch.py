@@ -70,7 +70,7 @@ def remove_keys(state_dict):
 def rename_key(name):
     name = name.replace("init_bn.1", "init_bn")
     if not name.startswith("outputlayer"):
-        name = f"ced_model.{name}"
+        name = f"encoder.{name}"
     return name
 
 
@@ -99,10 +99,6 @@ def convert_ced_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
         logger.info(f"Saving model {model_name} to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
-
-        # test
-        model_test = CedForAudioClassification(config).from_pretrained(pytorch_dump_folder_path)
-        pass
 
     if push_to_hub:
         logger.info("Pushing model and feature extractor to the hub...")

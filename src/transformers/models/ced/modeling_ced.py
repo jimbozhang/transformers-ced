@@ -505,7 +505,7 @@ class CedForAudioClassification(CedPreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        self.ced_model = CedModel(config)
+        self.encoder = CedModel(config)
 
         # Classifier head
         self.outputlayer = nn.Sequential(nn.LayerNorm(config.embed_dim), nn.Linear(config.embed_dim, config.outputdim))
@@ -535,6 +535,6 @@ class CedForAudioClassification(CedPreTrainedModel):
             return x.mean(1)
 
     def forward(self, x: torch.Tensor):
-        x = self.ced_model(x)
+        x = self.encoder(x)
         x = self.forward_head(x)
         return x
