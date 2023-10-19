@@ -62,17 +62,6 @@ if TYPE_CHECKING:
             CedModel,
             CedPreTrainedModel,
         )
-
-    try:
-        if not is_speech_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        # todo
-        pass
-
-
 else:
     import sys
 

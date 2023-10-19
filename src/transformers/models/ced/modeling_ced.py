@@ -22,6 +22,7 @@ from typing import Any, Callable, Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
+import torchaudio.transforms as audio_transforms
 
 from ...modeling_utils import PreTrainedModel
 from ...utils import (add_start_docstrings, logging)
@@ -127,6 +128,40 @@ class CedAudioPatchEmbed(nn.Module):
             x = torch.permute(torch.flatten(x, 2, 3), (0, 2, 1))
         x = self.norm(x)
         return x
+
+
+class CedFrontEnd(nn.Sequential):
+    def __init__(self,
+                 f_min: int = 0,
+                 sample_rate: int = 16000,
+                 win_size: int = 512,
+                 center: bool = True,
+                 n_fft: int = 512,
+                 f_max: Optional[int] = None,
+                 hop_size: int = 160,
+                 n_mels: int = 64):
+        self.f_min = f_min
+        self.sample_rate = sample_rate
+        self.win_size = win_size
+        self.center = center
+        self.n_fft = n_fft
+        self.f_max = f_max
+        self.hop_size = hop_size
+        self.n_mels = n_mels
+
+        super().__init__(
+            audio_transforms.MelSpectrogram(f_min=self.f_min,
+                                            sample_rate=self.sample_rate,
+                                            win_length=self.win_size,
+                                            center=self.center,
+                                            n_fft=self.n_fft,
+                                            f_max=self.f_max,
+                                            hop_length=self.hop_size,
+                                            n_mels=self.n_mels),
+            audio_transforms.AmplitudeToDB(top_db=120))
+
+    def forward(self, x):
+        return super().forward(x)
 
 
 class CedAttention(nn.Module):
@@ -367,6 +402,15 @@ class CedModel(CedPreTrainedModel):
         # Allowed length in number of frames, otherwise the positional embedding will throw an error
         self.maximal_allowed_length = self.config.target_length
 
+        self.front_end = CedFrontEnd(f_min=config.f_min,
+                                     f_max=config.f_max,
+                                     center=config.center,
+                                     win_size=config.win_size,
+                                     hop_size=config.hop_size,
+                                     sample_rate=16000,
+                                     n_fft=config.n_fft,
+                                     n_mels=config.n_mels)
+
         self.init_bn = torch.nn.BatchNorm2d(config.n_mels, momentum=0.01)
 
         self.patch_embed = CedAudioPatchEmbed(input_size=(config.n_mels,
@@ -431,11 +475,38 @@ class CedModel(CedPreTrainedModel):
         x = torch.permute(x, (0, 2, 1, 3))
 
         if x.shape[-1] > self.maximal_allowed_length:
-            raise ValueError(f"Length of input is too long. Maximum allowed length is {self.maximal_allowed_length}")
+            splits = x.split(self.maximal_allowed_length, -1)
 
-        return self.forward_features(x)
+            if splits[-1].shape[-1] < self.maximal_allowed_length:
+                if self.config.pad_last:
+                    pad = torch.zeros(*x.shape[:-1],
+                                      self.maximal_allowed_length,
+                                      device=x.device)
+                    pad[..., :splits[-1].shape[-1]] = splits[-1]
+                    splits = torch.stack((*splits[:-1], pad), dim=0)
+                else:
+                    splits = torch.stack(splits[:-1], dim=0)
+            else:
+                splits = torch.stack(splits[:-1], dim=0)
+            n_splits = len(splits)
+            x = torch.flatten(splits, 0, 1)  # spl b c f t-> (spl b) c f t
+            x = self.forward_head(self.ced(x))
+            x = torch.reshape(x, (n_splits, -1, self.outputdim))  # (spl b) d -> spl b d, spl=n_splits
+
+            if self.eval_avg == 'mean':
+                x = x.mean(0)
+            elif self.eval_avg == 'max':
+                x = x.max(0)[0]
+            else:
+                raise ValueError(
+                    f'Unknown Eval average function ({self.eval_avg})')
+        else:
+            x = self.forward_features(x)
+
+        return x
 
     def forward(self, x: torch.Tensor):
+        x = self.front_end(x)
         return self.forward_spectrogram(x)
 
 
@@ -451,7 +522,7 @@ class CedForAudioClassification(CedPreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        self.ced = CedModel(config)
+        self.ced_model = CedModel(config)
 
         # Classifier head
         self.outputlayer = nn.Sequential(nn.LayerNorm(config.embed_dim),
@@ -482,33 +553,6 @@ class CedForAudioClassification(CedPreTrainedModel):
             return x.mean(1)
 
     def forward(self, x: torch.Tensor):
-        if x.shape[-1] > self.ced.maximal_allowed_length:
-            splits = x.split(self.ced.target_length, -1)
-
-            if splits[-1].shape[-1] < self.ced.target_length:
-                if self.pad_last:
-                    pad = torch.zeros(*x.shape[:-1],
-                                      self.ced.target_length,
-                                      device=x.device)
-                    pad[..., :splits[-1].shape[-1]] = splits[-1]
-                    splits = torch.stack((*splits[:-1], pad), dim=0)
-                else:
-                    splits = torch.stack(splits[:-1], dim=0)
-            else:
-                splits = torch.stack(splits[:-1], dim=0)
-            n_splits = len(splits)
-            x = torch.flatten(splits, 0, 1)  # spl b c f t-> (spl b) c f t
-            x = self.forward_head(self.ced(x))
-            x = torch.reshape(x, (n_splits, -1, self.outputdim))  # (spl b) d -> spl b d, spl=n_splits
-
-            if self.eval_avg == 'mean':
-                x = x.mean(0)
-            elif self.eval_avg == 'max':
-                x = x.max(0)[0]
-            else:
-                raise ValueError(
-                    f'Unknown Eval average function ({self.eval_avg})')
-        else:
-            x = self.ced(x)
-            x = self.forward_head(x)
+        x = self.ced_model(x)
+        x = self.forward_head(x)
         return x
