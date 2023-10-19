@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert CED checkpoints from the original repository. URL: https://github.com/YuanGongND/ast"""
+"""Convert CED checkpoints from the original repository. URL: https://github.com/RicherMans/CED"""
 
 
 import argparse
@@ -28,7 +28,7 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
-def get_ced_config(model_name):
+def create_ced_config(model_name):
     config = CedConfig()
 
     if model_name == "ced-tiny":
@@ -56,7 +56,7 @@ def get_ced_config(model_name):
         config.num_heads = 12
         config.mlp_ratio = 4
     else:
-        raise ValueError("Model not supported")
+        raise NotImplementedError(f"Model not supported: {model_name}")
 
     return config
 
@@ -74,23 +74,12 @@ def rename_key(name):
     return name
 
 
-def convert_state_dict(orig_state_dict):
-    remove_keys(orig_state_dict)
-    new_state_dict = {rename_key(key): val for key, val in orig_state_dict.items()}
-    return new_state_dict
-
-
-def state_dict_from_original_pt(checkpoint_url):
-    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")
-    return convert_state_dict(state_dict)
-
-
 @torch.no_grad()
 def convert_ced_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=False):
     """
     Copy/paste/tweak model's weights to our CED structure.
     """
-    config = get_ced_config(model_name)
+    config = create_ced_config(model_name)
 
     model_name_to_url = {
         "ced-tiny": ("https://zenodo.org/record/8275347/files/audiotransformer_tiny_mAP_4814.pt?download=1"),
@@ -98,18 +87,21 @@ def convert_ced_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
         "ced-small": ("https://zenodo.org/record/8275319/files/audiotransformer_small_mAP_4958.pt?download=1"),
         "ced-base": ("https://zenodo.org/record/8275347/files/audiotransformer_base_mAP_4999.pt?download=1"),
     }
-    # load 🤗 model
+
+    state_dict = torch.hub.load_state_dict_from_url(model_name_to_url[model_name], map_location="cpu")
+    remove_keys(state_dict)
+    new_state_dict = {rename_key(key): val for key, val in state_dict.items()}
+
     model = CedForAudioClassification(config)
-    converted_state_dict = state_dict_from_original_pt(model_name_to_url[model_name])
-    model.load_state_dict(converted_state_dict)
+    model.load_state_dict(new_state_dict)
 
     if pytorch_dump_folder_path is not None:
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
         logger.info(f"Saving model {model_name} to {pytorch_dump_folder_path}")
-        model.save_pretrained(pytorch_dump_folder_path, state_dict=converted_state_dict)
+        model.save_pretrained(pytorch_dump_folder_path)
 
         # test
-        CedForAudioClassification(config).from_pretrained(pytorch_dump_folder_path)
+        model_test = CedForAudioClassification(config).from_pretrained(pytorch_dump_folder_path)
         pass
 
     if push_to_hub:
