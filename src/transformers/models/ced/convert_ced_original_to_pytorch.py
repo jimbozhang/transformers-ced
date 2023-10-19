@@ -93,27 +93,24 @@ def convert_ced_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     config = get_ced_config(model_name)
 
     model_name_to_url = {
-        "ced-tiny": (
-            "https://zenodo.org/record/8275347/files/audiotransformer_tiny_mAP_4814.pt?download=1"
-        ),
-        "ced-mini": (
-            "https://zenodo.org/record/8275347/files/audiotransformer_mini_mAP_4896.pt?download=1"
-        ),
-        "ced-small": (
-            "https://zenodo.org/record/8275319/files/audiotransformer_small_mAP_4958.pt?download=1"
-        ),
-        "ced-base": (
-            "https://zenodo.org/record/8275347/files/audiotransformer_base_mAP_4999.pt?download=1"
-        ),
+        "ced-tiny": ("https://zenodo.org/record/8275347/files/audiotransformer_tiny_mAP_4814.pt?download=1"),
+        "ced-mini": ("https://zenodo.org/record/8275347/files/audiotransformer_mini_mAP_4896.pt?download=1"),
+        "ced-small": ("https://zenodo.org/record/8275319/files/audiotransformer_small_mAP_4958.pt?download=1"),
+        "ced-base": ("https://zenodo.org/record/8275347/files/audiotransformer_base_mAP_4999.pt?download=1"),
     }
     # load 🤗 model
     model = CedForAudioClassification(config)
-    model.load_state_dict(state_dict_from_original_pt(model_name_to_url[model_name]))
+    converted_state_dict = state_dict_from_original_pt(model_name_to_url[model_name])
+    model.load_state_dict(converted_state_dict)
 
     if pytorch_dump_folder_path is not None:
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
         logger.info(f"Saving model {model_name} to {pytorch_dump_folder_path}")
-        model.save_pretrained(pytorch_dump_folder_path)
+        model.save_pretrained(pytorch_dump_folder_path, state_dict=converted_state_dict)
+
+        # test
+        CedForAudioClassification(config).from_pretrained(pytorch_dump_folder_path)
+        pass
 
     if push_to_hub:
         logger.info("Pushing model and feature extractor to the hub...")

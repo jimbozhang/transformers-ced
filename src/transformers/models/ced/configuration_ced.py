@@ -15,10 +15,10 @@
 """ Audio Spectogram Transformer (Ced) model configuration"""
 
 
+from typing import Optional
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-
-from typing import Optional
 
 
 logger = logging.get_logger(__name__)
@@ -33,8 +33,7 @@ class CedConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`CedModel`]. It is used to instantiate an Ced
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the Ced
-    [xiaomi/ced-tiny](https://huggingface.co/xiaomi/ced-tiny)
-    architecture.
+    [xiaomi/ced-tiny](https://huggingface.co/xiaomi/ced-tiny) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -96,45 +95,45 @@ class CedConfig(PretrainedConfig):
         embed_dim=768,
         depth=12,
         num_heads=12,
-        mlp_ratio=4.,
+        mlp_ratio=4.0,
         qkv_bias=True,
-        drop_rate=0.,
-        attn_drop_rate=0.,
-        drop_path_rate=0.,
+        drop_rate=0.0,
+        attn_drop_rate=0.0,
+        drop_path_rate=0.0,
         init_bn: bool = True,
         norm_layer=None,
         act_layer=None,
         init_values=None,
         target_length=1012,
-        pooling='mean',
+        pooling="mean",
         wavtransforms=None,
         spectransforms=None,
         time_patch_out: Optional[float] = None,
         freq_patch_out: Optional[float] = None,
-        eval_avg='mean',
+        eval_avg="mean",
         **kwargs,
     ):
         super().__init__(**kwargs)
 
-        assert pooling in ('mean', 'token', 'dm', 'logit')
+        assert pooling in ("mean", "token", "dm", "logit")
         self.outputdim = outputdim
         self.pooling = pooling
         self.embed_dim = embed_dim
         self.patch_stride = patch_stride
         self.patch_size = patch_size
-        self.n_mels = kwargs.get('n_mels', 64)
-        self.n_fft = kwargs.get('n_fft', 512)
-        self.hop_size = kwargs.get('hop_size', 160)
-        self.win_size = kwargs.get('win_size', 512)
-        self.f_min = kwargs.get('f_min', 0)
-        self.f_max = kwargs.get('f_max', 8000)
-        self.center = kwargs.get('center', True)
-        self.pad_last = kwargs.get('pad_last', True)
+        self.n_mels = kwargs.get("n_mels", 64)
+        self.n_fft = kwargs.get("n_fft", 512)
+        self.hop_size = kwargs.get("hop_size", 160)
+        self.win_size = kwargs.get("win_size", 512)
+        self.f_min = kwargs.get("f_min", 0)
+        self.f_max = kwargs.get("f_max", 8000)
+        self.center = kwargs.get("center", True)
+        self.pad_last = kwargs.get("pad_last", True)
         self.eval_avg = eval_avg
         self.time_patch_out = time_patch_out
         self.freq_patch_out = freq_patch_out
         self.target_length = target_length
-        self.n_mels = kwargs.get('n_mels', 64)
+        self.n_mels = kwargs.get("n_mels", 64)
         self.drop_rate = drop_rate
         self.drop_path_rate = drop_path_rate
         self.depth = depth

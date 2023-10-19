@@ -21,12 +21,13 @@ from typing import Any, Callable, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
-from torch import nn
 import torchaudio.transforms as audio_transforms
+from torch import nn
 
 from ...modeling_utils import PreTrainedModel
-from ...utils import (add_start_docstrings, logging)
+from ...utils import add_start_docstrings, logging
 from .configuration_ced import CedConfig
+
 
 logger = logging.get_logger(__name__)
 
@@ -66,7 +67,7 @@ class CedPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            trunc_normal_(module.weight, std=.02)
+            trunc_normal_(module.weight, std=0.02)
             if module.bias is not None:
                 nn.init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
@@ -99,27 +100,25 @@ def to_2tuple(x: Any) -> Tuple[Any, Any]:
 
 
 class CedAudioPatchEmbed(nn.Module):
-    def __init__(self,
-                 input_size: Conv_Kernel = 224,
-                 patch_size: Conv_Kernel = 16,
-                 patch_stride: Conv_Kernel = 16,
-                 in_chans: int = 1,
-                 embed_dim: int = 768,
-                 norm_layer: Optional[Callable] = None,
-                 flatten: bool = False):
+    def __init__(
+        self,
+        input_size: Conv_Kernel = 224,
+        patch_size: Conv_Kernel = 16,
+        patch_stride: Conv_Kernel = 16,
+        in_chans: int = 1,
+        embed_dim: int = 768,
+        norm_layer: Optional[Callable] = None,
+        flatten: bool = False,
+    ):
         super().__init__()
         self.input_size = to_2tuple(input_size)
         self.patch_size = to_2tuple(patch_size)
         self.patch_stride = to_2tuple(patch_stride)
-        self.grid_size = (self.input_size[0] // self.patch_stride[0],
-                          self.input_size[1] // self.patch_stride[1])
+        self.grid_size = (self.input_size[0] // self.patch_stride[0], self.input_size[1] // self.patch_stride[1])
         self.num_patches = self.grid_size[0] * self.grid_size[1]
         self.flatten = flatten
 
-        self.proj = nn.Conv2d(in_chans,
-                              embed_dim,
-                              kernel_size=patch_size,
-                              stride=patch_stride)
+        self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=patch_stride)
         self.norm = norm_layer(embed_dim) if norm_layer else nn.Identity()
 
     def forward(self, x):
@@ -131,15 +130,17 @@ class CedAudioPatchEmbed(nn.Module):
 
 
 class CedFrontEnd(nn.Sequential):
-    def __init__(self,
-                 f_min: int = 0,
-                 sample_rate: int = 16000,
-                 win_size: int = 512,
-                 center: bool = True,
-                 n_fft: int = 512,
-                 f_max: Optional[int] = None,
-                 hop_size: int = 160,
-                 n_mels: int = 64):
+    def __init__(
+        self,
+        f_min: int = 0,
+        sample_rate: int = 16000,
+        win_size: int = 512,
+        center: bool = True,
+        n_fft: int = 512,
+        f_max: Optional[int] = None,
+        hop_size: int = 160,
+        n_mels: int = 64,
+    ):
         self.f_min = f_min
         self.sample_rate = sample_rate
         self.win_size = win_size
@@ -150,15 +151,18 @@ class CedFrontEnd(nn.Sequential):
         self.n_mels = n_mels
 
         super().__init__(
-            audio_transforms.MelSpectrogram(f_min=self.f_min,
-                                            sample_rate=self.sample_rate,
-                                            win_length=self.win_size,
-                                            center=self.center,
-                                            n_fft=self.n_fft,
-                                            f_max=self.f_max,
-                                            hop_length=self.hop_size,
-                                            n_mels=self.n_mels),
-            audio_transforms.AmplitudeToDB(top_db=120))
+            audio_transforms.MelSpectrogram(
+                f_min=self.f_min,
+                sample_rate=self.sample_rate,
+                win_length=self.win_size,
+                center=self.center,
+                n_fft=self.n_fft,
+                f_max=self.f_max,
+                hop_length=self.hop_size,
+                n_mels=self.n_mels,
+            ),
+            audio_transforms.AmplitudeToDB(top_db=120),
+        )
 
     def forward(self, x):
         return super().forward(x)
@@ -170,12 +174,12 @@ class CedAttention(nn.Module):
         dim,
         num_heads=8,
         qkv_bias=False,
-        attn_drop=0.,
-        proj_drop=0.,
+        attn_drop=0.0,
+        proj_drop=0.0,
         causal: bool = False,
     ):
         super().__init__()
-        assert dim % num_heads == 0, 'dim should be divisible by num_heads'
+        assert dim % num_heads == 0, "dim should be divisible by num_heads"
         self.num_heads = num_heads
         head_dim = dim // num_heads
         self.scale = head_dim**-0.5
@@ -188,10 +192,8 @@ class CedAttention(nn.Module):
 
     def forward(self, x):
         B, N, C = x.shape
-        qkv = self.qkv(x).reshape(B, N, 3, self.num_heads,
-                                  C // self.num_heads).permute(2, 0, 3, 1, 4)
-        q, k, v = qkv.unbind(
-            0)  # make torchscript happy (cannot use tensor as tuple)
+        qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
+        q, k, v = qkv.unbind(0)  # make torchscript happy (cannot use tensor as tuple)
 
         attn = (q @ k.transpose(-2, -1)) * self.scale
         # if mask is not None:
@@ -208,8 +210,7 @@ class CedAttention(nn.Module):
         if self.causal:
             mask_value = -torch.finfo(attn.dtype).max
             i, j = attn.shape[-2:]
-            mask = torch.ones(i, j, device=q.device,
-                              dtype=torch.bool).triu(j - i + 1)
+            mask = torch.ones(i, j, device=q.device, dtype=torch.bool).triu(j - i + 1)
             attn = attn.masked_fill(mask, mask_value)
         attn = attn.softmax(dim=-1)
         # Only for the case that a mask with all True entries on a row is passed.
@@ -223,13 +224,14 @@ class CedAttention(nn.Module):
 
 
 class CedMlp(nn.Module):
-
-    def __init__(self,
-                 in_features: int,
-                 hidden_features: Optional[int] = None,
-                 out_features: Optional[int] = None,
-                 act_layer: Callable = nn.GELU,
-                 drop: float = 0.):
+    def __init__(
+        self,
+        in_features: int,
+        hidden_features: Optional[int] = None,
+        out_features: Optional[int] = None,
+        act_layer: Callable = nn.GELU,
+        drop: float = 0.0,
+    ):
         super().__init__()
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
@@ -249,10 +251,9 @@ class CedMlp(nn.Module):
 
 # Drop path is taken from Timm
 class DropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample  (when applied in main path of residual blocks).
-    """
+    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
-    def __init__(self, drop_prob: float = 0., scale_by_keep: bool = True):
+    def __init__(self, drop_prob: float = 0.0, scale_by_keep: bool = True):
         super(DropPath, self).__init__()
         self.drop_prob = drop_prob
         self.scale_by_keep = scale_by_keep
@@ -261,27 +262,22 @@ class DropPath(nn.Module):
         return drop_path(x, self.drop_prob, self.training, self.scale_by_keep)
 
     def extra_repr(self):
-        return f'drop_prob={round(self.drop_prob,3):0.3f}'
+        return f"drop_prob={round(self.drop_prob,3):0.3f}"
 
 
-def drop_path(x,
-              drop_prob: float = 0.,
-              training: bool = False,
-              scale_by_keep: bool = True):
+def drop_path(x, drop_prob: float = 0.0, training: bool = False, scale_by_keep: bool = True):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
-    This is the same as the DropConnect impl I created for EfficientNet, etc networks, however,
-    the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for
-    changing the layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use
-    'survival rate' as the argument.
+    This is the same as the DropConnect impl I created for EfficientNet, etc networks, however, the original name is
+    misleading as 'Drop Connect' is a different form of dropout in a separate paper... See discussion:
+    https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the layer and
+    argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the argument.
 
     """
-    if drop_prob == 0. or not training:
+    if drop_prob == 0.0 or not training:
         return x
     keep_prob = 1 - drop_prob
-    shape = (x.shape[0], ) + (1, ) * (
-        x.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
+    shape = (x.shape[0],) + (1,) * (x.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
     random_tensor = x.new_empty(shape).bernoulli_(keep_prob)
     if keep_prob > 0.0 and scale_by_keep:
         random_tensor.div_(keep_prob)
@@ -289,16 +285,15 @@ def drop_path(x,
 
 
 class CedBlock(nn.Module):
-
     def __init__(
         self,
         dim,
         num_heads,
-        mlp_ratio=4.,
+        mlp_ratio=4.0,
         qkv_bias=False,
-        drop=0.,
-        attn_drop=0.,
-        drop_path=0.,
+        drop=0.0,
+        attn_drop=0.0,
+        drop_path=0.0,
         act_layer: Callable = nn.GELU,
         norm_layer: Callable = nn.LayerNorm,
         attention_type: Callable = CedAttention,
@@ -307,24 +302,16 @@ class CedBlock(nn.Module):
     ):
         super().__init__()
         self.norm1 = norm_layer(dim)
-        self.attn = attention_type(dim,
-                                   num_heads=num_heads,
-                                   qkv_bias=qkv_bias,
-                                   attn_drop=attn_drop,
-                                   proj_drop=drop,
-                                   **attention_kwargs)
+        self.attn = attention_type(
+            dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop, **attention_kwargs
+        )
         self.ls1 = nn.Identity()
-        self.drop_path1 = DropPath(
-            drop_path) if drop_path > 0. else nn.Identity()
+        self.drop_path1 = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
 
         self.norm2 = norm_layer(dim)
-        self.mlp = CedMlp(in_features=dim,
-                          hidden_features=int(dim * mlp_ratio),
-                          act_layer=act_layer,
-                          drop=drop)
+        self.mlp = CedMlp(in_features=dim, hidden_features=int(dim * mlp_ratio), act_layer=act_layer, drop=drop)
         self.ls2 = nn.Identity()
-        self.drop_path2 = DropPath(
-            drop_path) if drop_path > 0. else nn.Identity()
+        self.drop_path2 = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
 
     def forward(self, x):
         x = x + self.drop_path1(self.ls1(self.attn(self.norm1(x))))
@@ -333,18 +320,15 @@ class CedBlock(nn.Module):
 
 
 # Taken from timm
-def trunc_normal_(tensor, mean=0., std=1., a=-2., b=2.):
+def trunc_normal_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):
     # type: (torch.Tensor, float, float, float, float) -> torch.Tensor
     r"""Fills the input Tensor with values drawn from a truncated
-    normal distribution. The values are effectively drawn from the
-    normal distribution :math:`\mathcal{N}(\text{mean}, \text{std}^2)`
-    with values outside :math:`[a, b]` redrawn until they are within
-    the bounds. The method used for generating the random values works
-    best when :math:`a \leq \text{mean} \leq b`.
+    normal distribution. The values are effectively drawn from the normal distribution :math:`\mathcal{N}(\text{mean},
+    \text{std}^2)` with values outside :math:`[a, b]` redrawn until they are within the bounds. The method used for
+    generating the random values works best when :math:`a \leq \text{mean} \leq b`.
 
-    NOTE: this impl is similar to the PyTorch trunc_normal_, the bounds [a, b] are
-    applied while sampling the normal with mean/std applied, therefore a, b args
-    should be adjusted to match the range of mean, std args.
+    NOTE: this impl is similar to the PyTorch trunc_normal_, the bounds [a, b] are applied while sampling the normal
+    with mean/std applied, therefore a, b args should be adjusted to match the range of mean, std args.
 
     Args:
         tensor: an n-dimensional `torch.Tensor`
@@ -353,8 +337,7 @@ def trunc_normal_(tensor, mean=0., std=1., a=-2., b=2.):
         a: the minimum cutoff value
         b: the maximum cutoff value
     Examples:
-        >>> w = torch.empty(3, 5)
-        >>> nn.init.trunc_normal_(w)
+        >>> w = torch.empty(3, 5) >>> nn.init.trunc_normal_(w)
     """
     return _no_grad_trunc_normal_(tensor, mean, std, a, b)
 
@@ -364,7 +347,7 @@ def _no_grad_trunc_normal_(tensor, mean, std, a, b):
     # Method based on https://people.sc.fsu.edu/~jburkardt/presentations/truncated_normal.pdf
     def norm_cdf(x):
         # Computes standard normal cumulative distribution function
-        return (1. + math.erf(x / math.sqrt(2.))) / 2.
+        return (1.0 + math.erf(x / math.sqrt(2.0))) / 2.0
 
     with torch.no_grad():
         # Values are generated by using a truncated uniform distribution and
@@ -382,7 +365,7 @@ def _no_grad_trunc_normal_(tensor, mean, std, a, b):
         tensor.erfinv_()
 
         # Transform to proper mean, std
-        tensor.mul_(std * math.sqrt(2.))
+        tensor.mul_(std * math.sqrt(2.0))
         tensor.add_(mean)
 
         # Clamp to ensure it's in the proper range
@@ -402,48 +385,51 @@ class CedModel(CedPreTrainedModel):
         # Allowed length in number of frames, otherwise the positional embedding will throw an error
         self.maximal_allowed_length = self.config.target_length
 
-        self.front_end = CedFrontEnd(f_min=config.f_min,
-                                     f_max=config.f_max,
-                                     center=config.center,
-                                     win_size=config.win_size,
-                                     hop_size=config.hop_size,
-                                     sample_rate=16000,
-                                     n_fft=config.n_fft,
-                                     n_mels=config.n_mels)
+        self.front_end = CedFrontEnd(
+            f_min=config.f_min,
+            f_max=config.f_max,
+            center=config.center,
+            win_size=config.win_size,
+            hop_size=config.hop_size,
+            sample_rate=16000,
+            n_fft=config.n_fft,
+            n_mels=config.n_mels,
+        )
 
         self.init_bn = torch.nn.BatchNorm2d(config.n_mels, momentum=0.01)
 
-        self.patch_embed = CedAudioPatchEmbed(input_size=(config.n_mels,
-                                                          config.target_length),
-                                              embed_dim=config.embed_dim,
-                                              patch_size=config.patch_size,
-                                              flatten=False,
-                                              patch_stride=config.patch_stride)
+        self.patch_embed = CedAudioPatchEmbed(
+            input_size=(config.n_mels, config.target_length),
+            embed_dim=config.embed_dim,
+            patch_size=config.patch_size,
+            flatten=False,
+            patch_stride=config.patch_stride,
+        )
 
-        self.time_pos_embed = nn.Parameter(
-            torch.randn(1, config.embed_dim, 1, self.patch_embed.grid_size[1]) * .02)
-        self.freq_pos_embed = nn.Parameter(
-            torch.randn(1, config.embed_dim, self.patch_embed.grid_size[0], 1) * .02)
+        self.time_pos_embed = nn.Parameter(torch.randn(1, config.embed_dim, 1, self.patch_embed.grid_size[1]) * 0.02)
+        self.freq_pos_embed = nn.Parameter(torch.randn(1, config.embed_dim, self.patch_embed.grid_size[0], 1) * 0.02)
         norm_layer = partial(nn.LayerNorm, eps=1e-6)
         act_layer = nn.GELU
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.depth)
-               ]  # stochastic depth decay rule
+        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.depth)]  # stochastic depth decay rule
         self.pos_drop = nn.Dropout(p=config.drop_rate)
-        self.blocks = nn.Sequential(*[
-            CedBlock(
-                dim=config.embed_dim,
-                num_heads=config.num_heads,
-                mlp_ratio=config.mlp_ratio,
-                qkv_bias=config.qkv_bias,
-                init_values=config.init_values,
-                drop=config.drop_rate,
-                attn_drop=config.attn_drop_rate,
-                drop_path=dpr[i],
-                norm_layer=norm_layer,
-                act_layer=act_layer,
-                attention_type=CedAttention,
-            ) for i in range(config.depth)
-        ])
+        self.blocks = nn.Sequential(
+            *[
+                CedBlock(
+                    dim=config.embed_dim,
+                    num_heads=config.num_heads,
+                    mlp_ratio=config.mlp_ratio,
+                    qkv_bias=config.qkv_bias,
+                    init_values=config.init_values,
+                    drop=config.drop_rate,
+                    attn_drop=config.attn_drop_rate,
+                    drop_path=dpr[i],
+                    norm_layer=norm_layer,
+                    act_layer=act_layer,
+                    attention_type=CedAttention,
+                )
+                for i in range(config.depth)
+            ]
+        )
         self.norm = norm_layer(config.embed_dim)
 
         # Initialize weights and apply final processing
@@ -458,7 +444,7 @@ class CedModel(CedPreTrainedModel):
         # x = rearrange(x, 'b c f t -> b (f t) c')
         x = torch.permute(torch.flatten(x, 2, 3), (0, 2, 1))
 
-        if self.config.pooling == 'token':
+        if self.config.pooling == "token":
             cls_token = self.cls_token.expand(x.shape[0], -1, -1)
             cls_token = cls_token + self.token_pos_embed
             x = torch.cat((cls_token, x), dim=1)
@@ -479,10 +465,8 @@ class CedModel(CedPreTrainedModel):
 
             if splits[-1].shape[-1] < self.maximal_allowed_length:
                 if self.config.pad_last:
-                    pad = torch.zeros(*x.shape[:-1],
-                                      self.maximal_allowed_length,
-                                      device=x.device)
-                    pad[..., :splits[-1].shape[-1]] = splits[-1]
+                    pad = torch.zeros(*x.shape[:-1], self.maximal_allowed_length, device=x.device)
+                    pad[..., : splits[-1].shape[-1]] = splits[-1]
                     splits = torch.stack((*splits[:-1], pad), dim=0)
                 else:
                     splits = torch.stack(splits[:-1], dim=0)
@@ -493,13 +477,12 @@ class CedModel(CedPreTrainedModel):
             x = self.forward_head(self.ced(x))
             x = torch.reshape(x, (n_splits, -1, self.outputdim))  # (spl b) d -> spl b d, spl=n_splits
 
-            if self.eval_avg == 'mean':
+            if self.eval_avg == "mean":
                 x = x.mean(0)
-            elif self.eval_avg == 'max':
+            elif self.eval_avg == "max":
                 x = x.max(0)[0]
             else:
-                raise ValueError(
-                    f'Unknown Eval average function ({self.eval_avg})')
+                raise ValueError(f"Unknown Eval average function ({self.eval_avg})")
         else:
             x = self.forward_features(x)
 
@@ -512,8 +495,8 @@ class CedModel(CedPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Ced model with an audio classification head on top (a linear layer on top of the pooled
-    output) e.g. for datasets like AudioSet, Speech Commands v2.
+    Ced model with an audio classification head on top (a linear layer on top of the pooled output) e.g. for datasets
+    like AudioSet, Speech Commands v2.
     """,
     CED_START_DOCSTRING,
 )
@@ -525,23 +508,22 @@ class CedForAudioClassification(CedPreTrainedModel):
         self.ced_model = CedModel(config)
 
         # Classifier head
-        self.outputlayer = nn.Sequential(nn.LayerNorm(config.embed_dim),
-                                         nn.Linear(config.embed_dim, config.outputdim))
+        self.outputlayer = nn.Sequential(nn.LayerNorm(config.embed_dim), nn.Linear(config.embed_dim, config.outputdim))
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def forward_head(self, x: torch.Tensor) -> torch.Tensor:
-        if self.config.pooling == 'token':
+        if self.config.pooling == "token":
             x = x[:, 0]
             return self.outputlayer(x).sigmoid()
-        elif self.config.pooling == 'mean':
+        elif self.config.pooling == "mean":
             x = x.mean(1)
             return self.outputlayer(x).sigmoid()
-        elif self.config.pooling == 'logit':
+        elif self.config.pooling == "logit":
             x = x.mean(1)
             return self.outputlayer(x)
-        elif self.config.pooling == 'dm':
+        elif self.config.pooling == "dm":
             # Unpack using the frequency dimension, which is constant
             # 'b (f t) d -> b f t d', f=self.patch_embed.grid_size[0])
             x = torch.reshape(x, (x.shape[0], self.patch_embed.grid_size[0], -1, x.shape[3]))

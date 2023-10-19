@@ -147,10 +147,6 @@ _import_structure = {
         "AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "ASTConfig",
     ],
-    "models.ced": [
-        "CED_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "CedConfig",
-    ],
     "models.auto": [
         "ALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "CONFIG_MAPPING",
@@ -229,6 +225,10 @@ _import_structure = {
     "models.byt5": ["ByT5Tokenizer"],
     "models.camembert": ["CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CamembertConfig"],
     "models.canine": ["CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP", "CanineConfig", "CanineTokenizer"],
+    "models.ced": [
+        "CED_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "CedConfig",
+    ],
     "models.chinese_clip": [
         "CHINESE_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "ChineseCLIPConfig",
@@ -1112,14 +1112,6 @@ else:
             "ASTPreTrainedModel",
         ]
     )
-    _import_structure["models.ced"].extend(
-        [
-            "CED_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "CedForAudioClassification",
-            "CedModel",
-            "CedPreTrainedModel",
-        ]
-    )
     _import_structure["models.auto"].extend(
         [
             "MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING",
@@ -1408,6 +1400,14 @@ else:
             "CanineModel",
             "CaninePreTrainedModel",
             "load_tf_weights_in_canine",
+        ]
+    )
+    _import_structure["models.ced"].extend(
+        [
+            "CED_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "CedForAudioClassification",
+            "CedModel",
+            "CedPreTrainedModel",
         ]
     )
     _import_structure["models.chinese_clip"].extend(
@@ -4291,10 +4291,6 @@ if TYPE_CHECKING:
         AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         ASTConfig,
     )
-    from .models.ced import (
-        CED_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        CedConfig,
-    )
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -4368,6 +4364,10 @@ if TYPE_CHECKING:
     from .models.byt5 import ByT5Tokenizer
     from .models.camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
     from .models.canine import CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP, CanineConfig, CanineTokenizer
+    from .models.ced import (
+        CED_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        CedConfig,
+    )
     from .models.chinese_clip import (
         CHINESE_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         ChineseCLIPConfig,
@@ -5165,12 +5165,6 @@ if TYPE_CHECKING:
             ASTModel,
             ASTPreTrainedModel,
         )
-        from .models.ced import (
-            CED_PRETRAINED_MODEL_ARCHIVE_LIST,
-            CedForAudioClassification,
-            CedModel,
-            CedPreTrainedModel,
-        )
         from .models.auto import (
             MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING,
             MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING,
@@ -5420,6 +5414,12 @@ if TYPE_CHECKING:
             CanineModel,
             CaninePreTrainedModel,
             load_tf_weights_in_canine,
+        )
+        from .models.ced import (
+            CED_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CedForAudioClassification,
+            CedModel,
+            CedPreTrainedModel,
         )
         from .models.chinese_clip import (
             CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,

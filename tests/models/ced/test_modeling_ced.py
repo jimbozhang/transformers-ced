@@ -23,7 +23,6 @@ from transformers import CedConfig
 from transformers.testing_utils import require_torch, require_torchaudio, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_torchaudio_available
 
-from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
@@ -212,11 +211,7 @@ def prepare_audio():
 class CedModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return (
-            ASTFeatureExtractor.from_pretrained("xiaomi/ced-tiny")
-            if is_torchaudio_available()
-            else None
-        )
+        return ASTFeatureExtractor.from_pretrained("xiaomi/ced-tiny") if is_torchaudio_available() else None
 
     @slow
     def test_inference_audio_classification(self):
