@@ -52,9 +52,6 @@ class CedFeatureExtractor(SequenceFeatureExtractor):
         self.hop_size = hop_size
         self.n_mels = n_mels
 
-    def pt_tensor_to_batchfeature(self, x: torch.Tensor) -> BatchFeature:
-        return BatchFeature(x)
-
     def __call__(self, x: torch.Tensor) -> BatchFeature:
         mel_spectrogram = audio_transforms.MelSpectrogram(
             f_min=self.f_min,
@@ -70,4 +67,4 @@ class CedFeatureExtractor(SequenceFeatureExtractor):
 
         x = mel_spectrogram(x)
         x = amplitude_to_db(x)
-        return x  # self.pt_tensor_to_batchfeature(x)
+        return BatchFeature({"input_values": x})
