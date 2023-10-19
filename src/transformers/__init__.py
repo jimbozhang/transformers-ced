@@ -904,6 +904,7 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     _import_structure["models.audio_spectrogram_transformer"].append("ASTFeatureExtractor")
+    _import_structure["models.ced"].append("CedFeatureExtractor")
     _import_structure["models.speech_to_text"].append("Speech2TextFeatureExtractor")
 
 # Tensorflow-text-specific objects
@@ -4991,6 +4992,7 @@ if TYPE_CHECKING:
         from .utils.dummy_speech_objects import *
     else:
         from .models.audio_spectrogram_transformer import ASTFeatureExtractor
+        from .models.ced import CedFeatureExtractor
         from .models.speech_to_text import Speech2TextFeatureExtractor
 
     try:

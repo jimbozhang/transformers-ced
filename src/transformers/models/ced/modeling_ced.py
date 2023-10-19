@@ -385,17 +385,6 @@ class CedModel(CedPreTrainedModel):
         # Allowed length in number of frames, otherwise the positional embedding will throw an error
         self.maximal_allowed_length = self.config.target_length
 
-        self.front_end = CedFrontEnd(
-            f_min=config.f_min,
-            f_max=config.f_max,
-            center=config.center,
-            win_size=config.win_size,
-            hop_size=config.hop_size,
-            sample_rate=16000,
-            n_fft=config.n_fft,
-            n_mels=config.n_mels,
-        )
-
         self.init_bn = torch.nn.BatchNorm2d(config.n_mels, momentum=0.01)
 
         self.patch_embed = CedAudioPatchEmbed(
@@ -489,7 +478,6 @@ class CedModel(CedPreTrainedModel):
         return x
 
     def forward(self, x: torch.Tensor):
-        x = self.front_end(x)
         return self.forward_spectrogram(x)
 
 

@@ -20,7 +20,7 @@ from pathlib import Path
 
 import torch
 
-from transformers import CedConfig, CedForAudioClassification
+from transformers import CedConfig, CedFeatureExtractor, CedForAudioClassification
 from transformers.utils import logging
 
 
@@ -29,7 +29,7 @@ logger = logging.get_logger(__name__)
 
 
 def remove_keys(state_dict):
-    ignore_keys = []
+    ignore_keys = [key for key in state_dict.keys() if key.startswith("front_end")]
     for k in ignore_keys:
         state_dict.pop(k, None)
 
@@ -43,9 +43,6 @@ def rename_key(name):
 
 @torch.no_grad()
 def convert_ced_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=False):
-    """
-    Copy/paste/tweak model's weights to our CED structure.
-    """
     config = CedConfig(model_name)
 
     model_name_to_url = {
@@ -62,14 +59,17 @@ def convert_ced_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     model = CedForAudioClassification(config)
     model.load_state_dict(new_state_dict)
 
+    feature_extractor = CedFeatureExtractor()
+
     if pytorch_dump_folder_path is not None:
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
         logger.info(f"Saving model {model_name} to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
+        feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
-        logger.info("Pushing model and feature extractor to the hub...")
         model.push_to_hub(f"xiaomi/{model_name}")
+        feature_extractor.push_to_hub(f"xiaomi/{model_name}")
 
 
 if __name__ == "__main__":
