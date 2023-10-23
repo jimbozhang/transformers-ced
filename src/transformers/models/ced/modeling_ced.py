@@ -35,12 +35,9 @@ _CONFIG_FOR_DOC = "CedConfig"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "xiaomi/ced-tiny"
-_EXPECTED_OUTPUT_SHAPE = [1, 1214, 768]
 
 # Audio classification docstring
 _SEQ_CLASS_CHECKPOINT = "xiaomi/ced-tiny"
-_SEQ_CLASS_EXPECTED_OUTPUT = "'Speech'"
-_SEQ_CLASS_EXPECTED_LOSS = 0.17
 
 
 CED_PRETRAINED_MODEL_ARCHIVE_LIST = [
