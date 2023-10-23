@@ -15,8 +15,6 @@
 """ CED model configuration"""
 
 
-from typing import Optional
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -31,30 +29,32 @@ CED_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 class CedConfig(PretrainedConfig):
     r"""
     TODO: Add docstring
-    ```"""
+    """
 
     def __init__(
         self,
         name=None,
+        attn_drop_rate=0.0,
+        depth=12,
+        drop_path_rate=0.0,
+        drop_rate=0.0,
+        embed_dim=768,
+        eval_avg="mean",
+        init_values=None,
+        mlp_ratio=4.0,
+        num_heads=12,
         outputdim=527,
         patch_size=16,
         patch_stride=16,
-        embed_dim=768,
-        depth=12,
-        num_heads=12,
-        mlp_ratio=4.0,
-        qkv_bias=True,
-        drop_rate=0.0,
-        attn_drop_rate=0.0,
-        drop_path_rate=0.0,
-        init_values=None,
-        target_length=1012,
         pooling="mean",
-        time_patch_out: Optional[float] = None,
-        freq_patch_out: Optional[float] = None,
-        eval_avg="mean",
+        qkv_bias=True,
+        target_length=1012,
         **kwargs,
     ):
+        r"""
+        TODO: Add docstring
+        """
+
         super().__init__(**kwargs)
 
         if name == "ced-tiny":
@@ -85,29 +85,28 @@ class CedConfig(PretrainedConfig):
             logger.info("No model name specified for CedConfig, use default settings.")
 
         assert pooling in ("mean", "token", "dm", "logit")
-        self.outputdim = outputdim
-        self.pooling = pooling
-        self.embed_dim = embed_dim
-        self.patch_stride = patch_stride
-        self.patch_size = patch_size
-        self.n_mels = kwargs.get("n_mels", 64)
-        self.n_fft = kwargs.get("n_fft", 512)
-        self.hop_size = kwargs.get("hop_size", 160)
-        self.win_size = kwargs.get("win_size", 512)
-        self.f_min = kwargs.get("f_min", 0)
-        self.f_max = kwargs.get("f_max", 8000)
-        self.center = kwargs.get("center", True)
-        self.pad_last = kwargs.get("pad_last", True)
-        self.eval_avg = eval_avg
-        self.time_patch_out = time_patch_out
-        self.freq_patch_out = freq_patch_out
-        self.target_length = target_length
-        self.n_mels = kwargs.get("n_mels", 64)
-        self.drop_rate = drop_rate
-        self.drop_path_rate = drop_path_rate
-        self.depth = depth
-        self.num_heads = num_heads
-        self.mlp_ratio = mlp_ratio
-        self.qkv_bias = qkv_bias
+        self.name = name
         self.attn_drop_rate = attn_drop_rate
+        self.center = kwargs.get("center", True)
+        self.depth = depth
+        self.drop_path_rate = drop_path_rate
+        self.drop_rate = drop_rate
+        self.embed_dim = embed_dim
+        self.eval_avg = eval_avg
+        self.f_max = kwargs.get("f_max", 8000)
+        self.f_min = kwargs.get("f_min", 0)
+        self.hop_size = kwargs.get("hop_size", 160)
         self.init_values = init_values
+        self.mlp_ratio = mlp_ratio
+        self.n_fft = kwargs.get("n_fft", 512)
+        self.n_mels = kwargs.get("n_mels", 64)
+        self.n_mels = kwargs.get("n_mels", 64)
+        self.num_heads = num_heads
+        self.outputdim = outputdim
+        self.pad_last = kwargs.get("pad_last", True)
+        self.patch_size = patch_size
+        self.patch_stride = patch_stride
+        self.pooling = pooling
+        self.qkv_bias = qkv_bias
+        self.target_length = target_length
+        self.win_size = kwargs.get("win_size", 512)

@@ -21,7 +21,6 @@ from typing import Any, Callable, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
-import torchaudio.transforms as audio_transforms
 from torch import nn
 
 from ...modeling_utils import PreTrainedModel
@@ -127,45 +126,6 @@ class CedAudioPatchEmbed(nn.Module):
             x = torch.permute(torch.flatten(x, 2, 3), (0, 2, 1))
         x = self.norm(x)
         return x
-
-
-class CedFrontEnd(nn.Sequential):
-    def __init__(
-        self,
-        f_min: int = 0,
-        sample_rate: int = 16000,
-        win_size: int = 512,
-        center: bool = True,
-        n_fft: int = 512,
-        f_max: Optional[int] = None,
-        hop_size: int = 160,
-        n_mels: int = 64,
-    ):
-        self.f_min = f_min
-        self.sample_rate = sample_rate
-        self.win_size = win_size
-        self.center = center
-        self.n_fft = n_fft
-        self.f_max = f_max
-        self.hop_size = hop_size
-        self.n_mels = n_mels
-
-        super().__init__(
-            audio_transforms.MelSpectrogram(
-                f_min=self.f_min,
-                sample_rate=self.sample_rate,
-                win_length=self.win_size,
-                center=self.center,
-                n_fft=self.n_fft,
-                f_max=self.f_max,
-                hop_length=self.hop_size,
-                n_mels=self.n_mels,
-            ),
-            audio_transforms.AmplitudeToDB(top_db=120),
-        )
-
-    def forward(self, x):
-        return super().forward(x)
 
 
 class CedAttention(nn.Module):
@@ -421,6 +381,10 @@ class CedModel(CedPreTrainedModel):
         )
         self.norm = norm_layer(config.embed_dim)
 
+        # Make `check_config_attributes` happy
+        if not self.config.name.startswith("ced"):
+            raise NotImplementedError
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -466,9 +430,9 @@ class CedModel(CedPreTrainedModel):
             x = self.forward_head(self.ced(x))
             x = torch.reshape(x, (n_splits, -1, self.outputdim))  # (spl b) d -> spl b d, spl=n_splits
 
-            if self.eval_avg == "mean":
+            if self.config.eval_avg == "mean":
                 x = x.mean(0)
-            elif self.eval_avg == "max":
+            elif self.config.eval_avg == "max":
                 x = x.max(0)[0]
             else:
                 raise ValueError(f"Unknown Eval average function ({self.eval_avg})")
@@ -478,6 +442,9 @@ class CedModel(CedPreTrainedModel):
         return x
 
     def forward(self, x: torch.Tensor):
+        r"""
+        TODO: Add docstring
+        """
         return self.forward_spectrogram(x)
 
 
@@ -522,6 +489,9 @@ class CedForAudioClassification(CedPreTrainedModel):
             return x.mean(1)
 
     def forward(self, x: torch.Tensor):
+        r"""
+        TODO: Add docstring
+        """
         x = self.encoder(x)
         x = self.forward_head(x)
         return x

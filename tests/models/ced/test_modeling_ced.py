@@ -16,7 +16,7 @@
 
 import unittest
 
-from transformers.testing_utils import require_torch, require_torchaudio, torch_device
+from transformers.testing_utils import require_torch, require_torchaudio, slow, torch_device
 from transformers.utils import is_torch_available, is_torchaudio_available
 
 
@@ -33,13 +33,12 @@ if is_torchaudio_available():
 @require_torch
 @require_torchaudio
 class CedModelIntegrationTest(unittest.TestCase):
+    @slow
     def test_inference_audio_classification(self):
         feature_extractor = CedFeatureExtractor()
         model = CedForAudioClassification.from_pretrained("xiaomi/ced-tiny").eval()
         audio = torch.arange(1, 16000).unsqueeze(0) / 1e4
-        outputs = feature_extractor(audio).to(torch_device)
-
-        feature = feature_extractor(audio)['input_values']
+        feature = feature_extractor(audio)["input_values"]
         outputs = model(feature)
 
         # verify the logits

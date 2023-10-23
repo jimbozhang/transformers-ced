@@ -43,6 +43,10 @@ def rename_key(name):
 
 @torch.no_grad()
 def convert_ced_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=False):
+    r"""
+    TODO: Add docstring
+    """
+
     config = CedConfig(model_name)
 
     model_name_to_url = {

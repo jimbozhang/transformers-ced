@@ -30,6 +30,10 @@ logger = logging.get_logger(__name__)
 
 
 class CedFeatureExtractor(SequenceFeatureExtractor):
+    r"""
+    TODO: Add docstring
+    """
+
     def __init__(
         self,
         f_min: int = 0,
@@ -42,6 +46,9 @@ class CedFeatureExtractor(SequenceFeatureExtractor):
         n_mels: int = 64,
         **kwargs,
     ):
+        r"""
+        TODO: Add docstring
+        """
         super().__init__(feature_size=n_mels, sampling_rate=sample_rate, padding_value=0.0, **kwargs)
         self.f_min = f_min
         self.sample_rate = sample_rate
@@ -53,6 +60,9 @@ class CedFeatureExtractor(SequenceFeatureExtractor):
         self.n_mels = n_mels
 
     def __call__(self, x: torch.Tensor) -> BatchFeature:
+        r"""
+        TODO: Add docstring
+        """
         mel_spectrogram = audio_transforms.MelSpectrogram(
             f_min=self.f_min,
             sample_rate=self.sample_rate,
